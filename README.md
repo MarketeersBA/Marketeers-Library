@@ -1,7 +1,7 @@
-# Marketeers Library
+﻿# Marketeers Library
 
 Centralized technical documentation and infrastructure calculations for Marketeers platforms.
-![Marketeers Ecosystem](<Our Companies_ Market Intelligence Ecosystem.png>)
+![Marketeers Ecosystem](assets/marketeers-ecosystem.png)
 
 ## Platforms
 
@@ -12,3 +12,4 @@ Centralized technical documentation and infrastructure calculations for Marketee
 Each platform contains:
 - AWS-Documentation
 - Calculations
+
