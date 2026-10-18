@@ -1,6 +1,7 @@
 # Marketeers Library
 
 Centralized technical documentation and infrastructure calculations for Marketeers platforms.
+![Uploading Our Companies_ Market Intelligence Ecosystem.png…]()
 
 ## Platforms
 
