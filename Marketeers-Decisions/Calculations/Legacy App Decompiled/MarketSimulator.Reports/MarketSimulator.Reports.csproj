@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>MarketSimulator.Reports</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net20</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms.DataVisualization">
+      <HintPath>..\lib\System.Windows.Forms.DataVisualization.dll</HintPath>
+    </Reference>
+    <Reference Include="CheckBoxComboBox">
+      <HintPath>..\lib\CheckBoxComboBox.dll</HintPath>
+    </Reference>
+    <Reference Include="MarketSimulator.Model">
+      <HintPath>..\lib\MarketSimulator.Model.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Data" />
+    <Reference Include="Microsoft.Office.Interop.Excel">
+      <HintPath>..\lib\Microsoft.Office.Interop.Excel.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Office.Interop.PowerPoint">
+      <HintPath>..\lib\Microsoft.Office.Interop.PowerPoint.dll</HintPath>
+    </Reference>
+    <Reference Include="UndoRedoFramework">
+      <HintPath>..\lib\UndoRedoFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml" />
+    <Reference Include="office">
+      <HintPath>..\lib\office.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Office.Interop.Graph">
+      <HintPath>..\lib\Microsoft.Office.Interop.Graph.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

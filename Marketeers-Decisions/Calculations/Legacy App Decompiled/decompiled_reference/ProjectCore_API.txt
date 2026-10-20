@@ -1,0 +1,339 @@
+ProjectCore API Reference (extracted via pythonnet reflection)
+
+=== Types in MarketSimulator.Model.dll ===
+DatabaseDesign, Engine, DatabaseDesign2, ProjectCore, DataTransaction, Groups, Segments, Attributes, Products, Resources
+
+=== ProjectCore class members ===
+AllProducts
+CanRedo
+CanUndo
+CompanyName
+CompanyProducts
+ConditionalAttributeNameList
+ContainsAttribute
+Count
+DecimalCount
+DiscreteAttributeNameList
+DtDisplayResult
+DtGroupDisplayResult
+EnlargeAll
+Equals
+ExcelColorNumberFormat
+FairShareOnBrands
+FairShareOnSKUs
+Finalize
+Financial
+GetHashCode
+GetObjectData
+GetType
+GroupMember
+GroupProducts
+GroupTypeList
+MemberwiseClone
+NumberFormat
+Overloads
+Project
+RedoCommandType
+ReferenceEquals
+ScenarioName
+SegmentMember
+SegmentTypeList
+SoMvsSoP
+StudyName
+StudyPath
+ToString
+UndoCommandType
+UseGroupng
+alterDatabaseDesign
+bindNOSAndTDCValues
+bindScenarioDatatableObjectToProjectProducts
+changeProductAttributeCombination
+clearDataSet
+clearProjects
+conditionalAttributeElasticityPerCompanyGroup
+conditionalAttributeElasticityPerCompanySKU
+conditionalAttributeElasticityPerGroup
+conditionalAttributeElasticityPerProduct
+crossBrandInteractionPerGroup
+crossBrandInteractionPerProduct
+cumIncrementalGainLoss
+exIncrementalGainLoss
+fillDatabase
+fillDisplayResultTable
+fillGroupsDisplayResult
+findPredictedShares
+flushUndoRedoHistory
+getAttributeLevelsBoundries
+getCompanyBasePenetration
+getCompanyBaseRevenue
+getCompanyBaseValueShare
+getCompanyPenetration
+getCompanyRevenue
+getCompanyShare
+getCompanyValueShare
+getDiscreteAttributeLevel
+getDiscreteAttributeLevelsNameArray
+getGroupBasePenetration
+getGroupBasePreferenceShare
+getGroupBaseRevenue
+getGroupBaseValueShare
+getGroupDataRow
+getGroupMemberIndex
+getGroupNewPreferenceShare
+getGroupPenetration
+getGroupResearchStart
+getGroupRevenue
+getGroupShare
+getGroupValueSalesUnit
+getGroupValueShare
+getNewProductList
+getPredictedSharesDatatable
+getProductAttribute
+getProductBasePenetration
+getProductBaseRevenue
+getProductBaseValueShare
+getProductDefaultAttribute
+getProductIncludedStatus
+getProductMinMaxConditionalValidator
+getProductName
+getProductOriginalWD
+getProductPenetration
+getProductRevenue
+getProductShare
+getProductSizeUnit
+getProductValueSalesUnit
+getProductValueShare
+getProductVaribles
+getProductWD
+getScenarioDatatableObject
+getSegmentation
+getTableSchema
+getTotalProductsAuditShare
+get_AllProducts
+get_CanRedo
+get_CanUndo
+get_CompanyName
+get_CompanyProducts
+get_ConditionalAttributeNameList
+get_Count
+get_DecimalCount
+get_DiscreteAttributeNameList
+get_DtDisplayResult
+get_DtGroupDisplayResult
+get_EnlargeAll
+get_ExcelColorNumberFormat
+get_Financial
+get_GroupMember
+get_GroupProducts
+get_GroupTypeList
+get_Item
+get_NumberFormat
+get_Project
+get_RedoCommandType
+get_ScenarioName
+get_SegmentMember
+get_SegmentTypeList
+get_StudyName
+get_StudyPath
+get_UndoCommandType
+get_UseGroupng
+includeExcludeProductScenarios
+initializeDataset
+initializeProjectMembers
+initializeProjectParameters
+initializeProjects
+initializeRespondentSelection
+isAttributeIncluded
+isAttributeVisible
+loadGroupsList
+loadSegmentsDictionary
+priceIndexAndRevenues
+rebaseProductNewShare
+redoOperation
+resetProductValues
+resetSegmentation
+respondentSegmentationProcess
+setDatabaseConnectionString
+setDataset
+setGroupResearchStart
+setNumberFormat
+setProductsBaseRevenue
+setProductsRevenue
+setSegmentation
+set_AllProducts
+set_CompanyName
+set_CompanyProducts
+set_ConditionalAttributeNameList
+set_DecimalCount
+set_DiscreteAttributeNameList
+set_DtDisplayResult
+set_DtGroupDisplayResult
+set_EnlargeAll
+set_ExcelColorNumberFormat
+set_Financial
+set_GroupMember
+set_GroupProducts
+set_GroupTypeList
+set_Item
+set_ScenarioName
+set_SegmentMember
+set_SegmentTypeList
+set_StudyName
+set_StudyPath
+set_UseGroupng
+undoOperation
+updateFinancial
+
+=== ProjectCore instance methods ===
+  ContainsAttribute
+  Equals
+  FairShareOnBrands
+  FairShareOnSKUs
+  Finalize
+  GetHashCode
+  GetObjectData
+  GetType
+  MemberwiseClone
+  Overloads
+  ReferenceEquals
+  SoMvsSoP
+  ToString
+  alterDatabaseDesign
+  bindNOSAndTDCValues
+  bindScenarioDatatableObjectToProjectProducts
+  changeProductAttributeCombination
+  clearDataSet
+  clearProjects
+  conditionalAttributeElasticityPerCompanyGroup
+  conditionalAttributeElasticityPerCompanySKU
+  conditionalAttributeElasticityPerGroup
+  conditionalAttributeElasticityPerProduct
+  crossBrandInteractionPerGroup
+  crossBrandInteractionPerProduct
+  cumIncrementalGainLoss
+  exIncrementalGainLoss
+  fillDatabase
+  fillDisplayResultTable
+  fillGroupsDisplayResult
+  findPredictedShares
+  flushUndoRedoHistory
+  getAttributeLevelsBoundries
+  getCompanyBasePenetration
+  getCompanyBaseRevenue
+  getCompanyBaseValueShare
+  getCompanyPenetration
+  getCompanyRevenue
+  getCompanyShare
+  getCompanyValueShare
+  getDiscreteAttributeLevel
+  getDiscreteAttributeLevelsNameArray
+  getGroupBasePenetration
+  getGroupBasePreferenceShare
+  getGroupBaseRevenue
+  getGroupBaseValueShare
+  getGroupDataRow
+  getGroupMemberIndex
+  getGroupNewPreferenceShare
+  getGroupPenetration
+  getGroupResearchStart
+  getGroupRevenue
+  getGroupShare
+  getGroupValueSalesUnit
+  getGroupValueShare
+  getNewProductList
+  getPredictedSharesDatatable
+  getProductAttribute
+  getProductBasePenetration
+  getProductBaseRevenue
+  getProductBaseValueShare
+  getProductDefaultAttribute
+  getProductIncludedStatus
+  getProductMinMaxConditionalValidator
+  getProductName
+  getProductOriginalWD
+  getProductPenetration
+  getProductRevenue
+  getProductShare
+  getProductSizeUnit
+  getProductValueSalesUnit
+  getProductValueShare
+  getProductVaribles
+  getProductWD
+  getScenarioDatatableObject
+  getSegmentation
+  getTableSchema
+  getTotalProductsAuditShare
+  get_AllProducts
+  get_CanRedo
+  get_CanUndo
+  get_CompanyName
+  get_CompanyProducts
+  get_ConditionalAttributeNameList
+  get_Count
+  get_DecimalCount
+  get_DiscreteAttributeNameList
+  get_DtDisplayResult
+  get_DtGroupDisplayResult
+  get_EnlargeAll
+  get_ExcelColorNumberFormat
+  get_Financial
+  get_GroupMember
+  get_GroupProducts
+  get_GroupTypeList
+  get_Item
+  get_NumberFormat
+  get_Project
+  get_RedoCommandType
+  get_ScenarioName
+  get_SegmentMember
+  get_SegmentTypeList
+  get_StudyName
+  get_StudyPath
+  get_UndoCommandType
+  get_UseGroupng
+  includeExcludeProductScenarios
+  initializeDataset
+  initializeProjectMembers
+  initializeProjectParameters
+  initializeProjects
+  initializeRespondentSelection
+  isAttributeIncluded
+  isAttributeVisible
+  loadGroupsList
+  loadSegmentsDictionary
+  priceIndexAndRevenues
+  rebaseProductNewShare
+  redoOperation
+  resetProductValues
+  resetSegmentation
+  respondentSegmentationProcess
+  setDatabaseConnectionString
+  setDataset
+  setGroupResearchStart
+  setNumberFormat
+  setProductsBaseRevenue
+  setProductsRevenue
+  setSegmentation
+  set_AllProducts
+  set_CompanyName
+  set_CompanyProducts
+  set_ConditionalAttributeNameList
+  set_DecimalCount
+  set_DiscreteAttributeNameList
+  set_DtDisplayResult
+  set_DtGroupDisplayResult
+  set_EnlargeAll
+  set_ExcelColorNumberFormat
+  set_Financial
+  set_GroupMember
+  set_GroupProducts
+  set_GroupTypeList
+  set_Item
+  set_ScenarioName
+  set_SegmentMember
+  set_SegmentTypeList
+  set_StudyName
+  set_StudyPath
+  set_UseGroupng
+  undoOperation
+  updateFinancial
