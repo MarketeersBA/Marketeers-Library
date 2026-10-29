@@ -2,7 +2,7 @@
 
 **Audience:** Business and technical readers who need to understand *what* the simulator calculates and *how*, without a heavy statistics background.
 
-**Scope:** The Python engine in `model/`. It mirrors the original Market Simulator (.NET) logic documented in `decompiled/PORTING_NOTES.md`.
+**Scope:** The desktop Market Simulator (.NET) engine, as recovered in [Legacy App Decompiled](Legacy%20App%20Decompiled/). Every formula below is checked against that source. The detailed reference pages ([PREFERENCE.md](PREFERENCE.md), [SHARES.md](SHARES.md), [METRICS.md](METRICS.md)) go further on each step.
 
 ---
 
@@ -19,7 +19,7 @@ It does this by:
 
 Think of it as a **what-if calculator** built on choice modeling, not a forecast of the future on its own.
 
-Everything else (analytics, optimizer, API) re-runs this same pipeline:
+Everything else (Chart Analysis, incremental, scenarios) re-runs this same pipeline:
 
 **Survey utilities → preference shares → volume shares → revenue / metrics**
 
@@ -36,8 +36,8 @@ Everything else (analytics, optimizer, API) re-runs this same pipeline:
 | **Discrete attribute** | Picks from named levels (e.g. Brand A / B / C). |
 | **Conditional attribute** | Takes numeric values (e.g. Price = 12.50). Utilities are **blended** between calibrated points. |
 | **SKU** | The product identity itself — each SKU has its own utility column in HBU. |
-| **Preference share** | Share of *stated choice* if everyone picked among included products. Sums to ~100% across included products. |
-| **Market share (volume share)** | Volume share after calibration (WD, size, rebasing). Sums to 100% for the modeled universe. |
+| **Preference share** | Share of *stated choice* if everyone picked among included products. Sums to 100% across included products. |
+| **Market share (volume share)** | Volume share after calibration (WD, size, rebasing). Sums to the base market total. |
 | **WD (Weighted Distribution)** | How widely the product is available (shelf presence, numeric %). Higher WD = easier to buy. |
 | **MSU** | *Market Size Unit* — scaling factor for market size in revenue formulas. |
 | **SU** | *Sales Unit* — additional revenue scaling from study design. |
@@ -51,35 +51,42 @@ Everything else (analytics, optimizer, API) re-runs this same pipeline:
 
 ## Pipeline (big picture)
 
-When you change a product or run a scenario, the engine runs these steps in order:
+When you change a product or run a scenario, `ProjectCore.findPredictedShares` runs these steps in order. Base preference shares are **not** recomputed here; they are calculated when the study loads or the segment changes, and reused.
 
 ```mermaid
 flowchart TD
-    A[Load study + HBU data] --> B[Apply segmentation filter]
-    B --> C[Reset products to base shares]
-    C --> D[Compute base preference shares]
-    D --> E[Compute scenario preference shares]
-    E --> F[Adjust preference for WD and Size]
-    F --> G[Convert preference to market share]
-    G --> H[Rebase shares - zero-sum redistribution]
-    H --> I[Compute revenue, value share, penetration]
-    I --> J[Display results table]
+    A[Hold included new products out] --> B[Reset current share and preference to base]
+    B --> C[Compute scenario preference shares]
+    C --> D[Adjust preference for WD and Size]
+    D --> E[Convert preference to volume share]
+    E --> F[Rebase shares - zero-sum redistribution]
+    F --> G{Any new product held out?}
+    G -- yes --> H[Store pass 1 as current share and preference]
+    H --> I[Put new products back]
+    I --> C
+    G -- no / second pass done --> J[Revenue, VSU, value share, penetration]
+    J --> K[Display results table]
 ```
 
-| Step | Module | Entry point | What it does |
-|------|--------|-------------|--------------|
-| 1 | `attribute_utilities.py` | `AttributeUtilityModel` | Load survey utilities; blend Price/Size between calibrated points |
-| 2 | `preference_engine.py` | `compute_preference_shares` | Turn scores into preference share % |
-| 3 | `share_calculator.py` | `calculate_new_shares` + rebase | Turn preference into volume share |
-| 4 | `metrics.py` | `apply_*_metrics` | Revenue, value share, penetration, indices |
+| Step | C# source | What it does |
+|------|-----------|--------------|
+| 1 | `Attributes.getAttributeLevelUtility` | Look up or blend each attribute’s utility |
+| 2 | `ProjectCore.loadUtilityMatrix`, `getPreferenceShare` | Turn scores into preference share % |
+| 3 | `Products.calculateNewShare`, `rebaseNewShare` | Turn preference into volume share |
+| 4 | `ProjectCore.setProductsRevenue`, `setProductsValueSalesUnit`, `setProductsValueShare`, `setProductsPenetration` | Revenue, value share, penetration |
 
-**Code entry point:** `ShareEngine.find_predicted_shares()` / `_run_pipeline` in `model/share_engine.py`, via `ProjectCore`.
+### Two passes when a new product is included
 
-Three calculation cores:
+If any included product is a **NewProduct** (no base share, no product it replaces), the engine runs the share calculation twice:
 
-1. Utility load / blend — `attribute_utilities`
-2. Choice model (MNL) → preference shares — `compute_preference_shares`
-3. Preference → volume shares + metrics — `calculate_new_shares` + `metrics`
+1. **Pass 1:** new products are taken out of the lineup and shares are calculated without them.
+2. **Store pass 1 as the new starting point:**
+   - A replaced product writes its new share and preference onto the **SKU it replaces**.
+   - Every other included product copies its new share and preference onto its current values.
+   - An excluded product whose alternatives (SKUs that replace it) are all excluded gets a current share of **0**.
+3. **Pass 2:** new products are put back, and preference plus volume share are calculated again.
+
+So in pass 2, existing products scale from their **pass 1 share**, not from their base share. This gives a new SKU its volume against a market that already contains every other change.
 
 ---
 
@@ -97,7 +104,7 @@ The respondent has a fixed utility score for each level. The product’s current
 
 #### Conditional attributes (e.g. Price, Size)
 
-The survey only gives utilities at a few calibrated points. If the scenario value sits between two points, the engine **blends** those utilities:
+The survey only gives utilities at a few calibrated points, and each product has its own grid of points. If the value matches a grid point exactly, that point’s utility is used. If it sits between two points, the engine **blends** those utilities:
 
 ```text
 utility = u₀ + (x − v₀) / (v₁ − v₀) · (u₁ − u₀)
@@ -105,46 +112,32 @@ utility = u₀ + (x − v₀) / (v₁ − v₀) · (u₁ − u₀)
 
 Where:
 
-- **v₀, v₁** — calibrated values on the design grid (e.g. price 10 and 12)
+- **v₀, v₁** — calibrated values on the product’s grid (e.g. price 10 and 12)
 - **u₀, u₁** — utilities at those levels for this person and product
 - **x** — value used in the scenario (e.g. price = 11.5)
 - **utility** — blended score at x
 
-If the scenario value is outside the grid, the engine continues that blend using the first or last pair of points.
+**Out of range is an error, not an extrapolation.** If the value is below the first grid point or above the last one, the utility is undefined and the engine stops with *“<product> has a base level out of boundry values”*. Edits are bounded to the grid to avoid this (see [EDITS.md](EDITS.md)).
 
 **Example:** price points **10** (utility **−2**) and **12** (utility **−4**), scenario price **11** → utility = **−3**.
 
 #### Total product utility
 
 ```text
-total utility = person weight × (sum of attribute utilities)
+score[person, product] = person weight × (sum of included attribute utilities)
 ```
 
-(The live simulator does this for all people and products at once in `preference_engine`; the idea is the same.)
-
-**Module:** `model/attribute_utilities.py` — class `AttributeUtilityModel`.
+The weight multiplies the score **inside** the choice formula below. It is not used to weight the average in step 2.
 
 ---
 
 ### 2. Preference shares (MNL)
 
-`preference_engine.compute_preference_shares`
+`loadUtilityMatrix` → `getPreferenceShare`
 
 **MNL** means Multinomial Logit: turn each person’s product scores into “what would they pick?” probabilities, then average those into a preference share %.
 
-1. **Build each person’s score for each product**
-
-```text
-score[person, product] = sum of that product’s attribute utilities
-```
-
-2. **Apply the person’s survey weight**
-
-```text
-score[person, product] = score[person, product] × person weight
-```
-
-3. **Convert scores to choice probabilities** (only products included in the lineup)
+1. **Convert scores to choice probabilities** (only products included in the lineup)
 
 ```text
 probability[person, product] =
@@ -155,35 +148,33 @@ probability[person, product] =
 
 Where:
 
-- **exponent** — study setting that makes favorites more or less dominant (`exponent_factor`). Exponent = 1 is neutral; values above 1 sharpen preferences.
+- **exponent** — study setting that makes favorites more or less dominant (`ExponentFactor`). Exponent = 1 is neutral; values above 1 sharpen preferences.
 - **probability** — chance this person picks that product (between 0 and 1; adds to 1 across included products)
 
-4. **Ignore people outside the selected segment** (their probabilities are set to zero)
-
-5. **Average to a preference share %**
+2. **Average over the selected segment** (respondents outside it are skipped)
 
 ```text
 preference share % for product =
-    100 × (sum of probabilities for that product) ÷ (number of people in the segment)
+    100 × (sum of probabilities for that product over selected people) ÷ (number of selected people)
 ```
 
-Preference shares across included products add up to about 100%.
+This is a simple average: every selected respondent counts once, whatever their weight.
 
 **Business reading:** Preference share answers *“What fraction of choosers would pick this SKU?”* before WD/size/volume calibration.
 
-**Module:** `model/preference_engine.py`.
+See [PREFERENCE.md](PREFERENCE.md) for details.
 
 ---
 
 ### 3. Volume share
 
-`share_calculator.calculate_new_shares`
+`Products.calculateNewShare`
 
-Preference share is “who would choose it.” **Volume share** is the market/volume outcome after distribution, pack size, and (for new/replaced items) launch factors.
+Preference share is “who would choose it.” **Volume share** is the market/volume outcome after distribution, pack size, and (for new items) launch factors.
 
 #### Step A — Adjust preference for availability and size
 
-- **Existing products:**
+- **Existing and replaced products:**
 
 ```text
 adjusted preference =
@@ -198,7 +189,9 @@ adjusted preference = preference × (new size ÷ base size)
 
 (New products skip the WD ratio here; they use WD in the volume formula later.)
 
-Then rescale so adjusted preferences for included products still add to 100.
+Then rescale so adjusted preferences for included products add to 100.
+
+**The adjusted value replaces the preference share.** From here on, the “Preference Share” column and the penetration formula both use this WD- and size-adjusted value, not the raw MNL result from step 2.
 
 Where:
 
@@ -210,16 +203,17 @@ Where:
 | Product type | Meaning | Formula |
 |--------------|---------|---------|
 | Existing | Already on market | `volume share = current volume share × (new preference ÷ current preference)` |
-| Replaced product | Replaces another SKU (e.g. reformulation) | `volume share = replaced SKU’s volume share × (replacement’s preference ÷ replaced SKU’s preference)` |
+| Replaced product | Replaces another SKU (e.g. reformulation) | `volume share = replaced SKU’s current share × (replacement’s preference ÷ replaced SKU’s current preference)` |
 | New product | True new launch | `volume share = preference × WD × consumption calib. × SOR × awareness × repeat ÷ 100` |
 
 Where:
 
+- **current** — the base value, or the pass 1 value when the two-pass rule above applies
 - **Existing** — scale this SKU’s own volume by how its preference moved
 - **Replaced product** — linked to the SKU it replaces; it has no own starting volume, so it borrows the replaced SKU’s volume and scales by preference change
 - **New product** — no replaced SKU; volume from preference × availability × launch funnel factors
 - **consumption calib., SOR, awareness, repeat** — launch inputs on the product
-- After that formula, volume share is also multiplied by **promotion calibration**
+- After that formula, every volume share is also multiplied by **promotion calibration**
 
 **Example (existing):** If preference rises 10% relative to current (`new preference ÷ current preference = 1.10`), volume share rises 10% *before* rebasing.
 
@@ -231,26 +225,32 @@ volume share = 8 × (12 ÷ 10) = 9.6
 
 #### Step C — Rebase (keep total market size fixed)
 
+`Products.rebaseNewShare`
+
 Initial share changes rarely sum to exactly the original total market. The engine **rebases** so total volume is preserved — gains in one place come from losses elsewhere.
 
-1. Compute each product’s volume change vs. its reference (own share, or replaced SKU’s share).
-2. Split changes into **gainers** and **losers**.
-3. If total market grew or shrank, **scale the gainers or losers** so the net change matches zero (relative to total base share).
-4. Apply a final scale:
+1. **Total current volume** = sum of current share over **all** products, included or not.
+2. **Change per included product** = new share − reference, where the reference is its own current share, or the replaced SKU’s current share for a replacement.
+3. Add up the **gains** (positive changes) and the **losses** (negative changes). An excluded product that still has current share counts as a loss of its whole share. A replacement adds back the replaced SKU’s share, so swapping one SKU for another isn’t counted as a loss.
+4. **Net change** = sum of new shares for included products − total current volume.
+   - If net > 0, each gain is scaled by `|losses ÷ gains|`.
+   - If net < 0, each loss is scaled by `|gains ÷ losses|`.
+   - The product’s new share = reference + scaled change.
+5. Final scale on every included product:
 
 ```text
-volume share = volume share × (total current volume ÷ total new volume)
+volume share = volume share × (total current volume ÷ sum of new shares for included products)
 ```
 
 **Business reading:** Someone has to lose share for someone else to gain. New products and delistings redistribute volume rather than creating a 110% market.
 
-**Module:** `model/share_calculator.py`.
+See [SHARES.md](SHARES.md) for details.
 
 ---
 
 ### 4. Revenue, value share, and penetration
 
-`metrics.apply_scenario_metrics`
+`setProductsRevenue` → `setProductsValueSalesUnit` → `setProductsValueShare` → `setProductsPenetration`
 
 #### Revenue
 
@@ -263,8 +263,8 @@ Where:
 - **MSU** — market size unit (study scaling)
 - **SU** — sales unit (study scaling)
 - **volume share** — share from step 3
-- **price** — scenario price
-- **pack size** — size unit used in the revenue formula
+- **price** — scenario price (only refreshed when the study has a `Price` attribute)
+- **pack size** — the product’s size unit
 
 Base revenue uses the same formula with base share and base price.
 
@@ -282,10 +282,12 @@ value share = VSU ÷ value share unit × 100
 value share unit =
     sum(VSU for included products)
     + VSU_anchor
-    − sum(base revenue for included / base products)
+    − sum(base revenue for base-included products)
 ```
 
 The **VSU anchor** (from study meta) ties value shares to external market value totals when provided.
+
+**Units quirk:** the formula subtracts base *revenue* (which includes SU) from a total of *VSU* (which doesn’t). The two only share units when SU = 1. This is how the legacy engine computes it.
 
 **Business reading:** Value share weights products by **money**, not just volume. A premium SKU with small volume can have high value share.
 
@@ -294,21 +296,24 @@ The **VSU anchor** (from study meta) ties value shares to external market value 
 Penetration links preference × distribution to volume share:
 
 ```text
-scale = sum(volume share) ÷ sum(preference share × WD)
+scale = sum(volume share) ÷ sum(adjusted preference share × new WD)
 
-penetration = preference share × WD × scale
+penetration = adjusted preference share × new WD × scale
 ```
+
+Both sums are over included products, and “adjusted preference share” is the value from step 3A.
 
 **Intuition:** Preference × WD measures “reachable demand.” The scale factor aligns that with actual rebased volume shares.
 
 #### Indices
 
-- **S.Index** = volume share ÷ base volume share  
-- **R.Index** = revenue ÷ base revenue  
+- **S.Index** = volume share ÷ base volume share
+- **R.Index** = revenue ÷ base revenue
+- **VS.Index** (group and company rows only) = value share ÷ base value share
 
-(Values above 1 mean up vs base; below 1 mean down.)
+(Values above 1 mean up vs base; below 1 mean down.) On the company total row, R.Index divides by company base revenue.
 
-**Module:** `model/metrics.py`.
+See [METRICS.md](METRICS.md) for details, including NOS, TDC and company MM$.
 
 ---
 
@@ -319,7 +324,8 @@ penetration = preference share × WD × scale
 | **B.Share** | Base (current market) volume share % |
 | **N.Share** | New (scenario) volume share % |
 | **S.Index** | Share index = N.Share ÷ B.Share (1.0 = unchanged) |
-| **Preference Share** | Scenario preference share % |
+| **Preference Share** | Scenario preference share %, after the WD and size adjustment |
+| **B.P.Share** | Base preference share % |
 | **Value Share** | Scenario value share % |
 | **Revenue** | Scenario revenue (study currency units, scaled by MSU/SU) |
 | **R.Index** | Revenue index = Revenue ÷ BaseRevenue |
@@ -333,8 +339,6 @@ Excluded products show **N.Share = 0** but retain **B.Share** for reference.
 
 ## Scenario edits — what happens when you change inputs
 
-Handled by `model/attribute_engine.py`:
-
 | Edit | Effect |
 |------|--------|
 | **Price (absolute)** | Sets new price; utilities blended from HBU price levels |
@@ -343,7 +347,7 @@ Handled by `model/attribute_engine.py`:
 | **Discrete level** | Switches to another level index (e.g. different flavor) |
 | **Include / exclude** | Removes product from choice set; excluded volume is redistributed in rebasing |
 
-Each change triggers a full recalculation through the pipeline above.
+Each change triggers a full recalculation through the pipeline above. See [EDITS.md](EDITS.md).
 
 ---
 
@@ -355,23 +359,19 @@ When you filter to a segment (e.g. “Age = 18–24”):
 2. Preference shares are averaged over selected respondents only.
 3. The rest of the pipeline runs unchanged.
 
-**Effect:** Shares reflect the sub-market’s preferences, not the full sample.
-
-**Module:** `StudyModel._apply_segmentation_filter()` in `model/study_model.py`.
+**Effect:** Shares reflect the sub-market’s preferences, not the full sample. See [SEGMENTS.md](SEGMENTS.md).
 
 ---
 
 ## Product groups
 
-Groups roll up individual SKU shares for reporting (volume rollup only; no separate choice model at group level).
-
-**Module:** `model/groups.py`.
+Groups roll up individual SKU shares for reporting (volume rollup only; no separate choice model at group level). See [GROUPS.md](GROUPS.md).
 
 ---
 
-## Worked micro-example (existing product, simplified)
+## Worked micro-example (existing products)
 
-Assume a 3-SKU market, one respondent type, exponent = 1, WD and size unchanged.
+Assume a 3-SKU market, exponent = 1, WD and size unchanged.
 
 | Product | Base share | Base pref | Scenario pref |
 |---------|------------|-----------|---------------|
@@ -379,26 +379,34 @@ Assume a 3-SKU market, one respondent type, exponent = 1, WD and size unchanged.
 | B | 35% | 35% | 30% |
 | C | 25% | 20% | 20% |
 
-**Before rebasing**, product A’s new share:
+**Before rebasing:**
 
 ```text
-volume share A = 40% × (50 ÷ 45) = 44.4%
+A = 40 × (50 ÷ 45) = 44.44   change +4.44
+B = 35 × (30 ÷ 35) = 30.00   change −5.00
+C = 25 × (20 ÷ 20) = 25.00   change  0
 ```
 
-Similar calculations for B and C, then **rebase** so total returns to 100%. Products gaining preference take share from those losing it.
+**Rebase:** the new shares sum to 99.44, so net < 0 and losses are scaled by `|4.44 ÷ −5.00| = 0.889`. B’s change becomes −4.44, so B = 30.56. The total is now 100, so the final scale is 1.
+
+| Product | N.Share |
+|---------|---------|
+| A | 44.44% |
+| B | 30.56% |
+| C | 25.00% |
 
 ---
 
 ## Data inputs required
 
-### Design Excel (study.json source)
+### Design Excel
 
 - Product list with base shares, WD, attributes
 - Attribute definitions (discrete vs conditional)
 - Conditional level grids per product (for blending)
 - Segments, groups, study constants (MSU, SU, VSU, exponent)
 
-### HBU Excel (hbu.parquet source)
+### HBU Excel
 
 Per respondent row:
 
@@ -406,94 +414,58 @@ Per respondent row:
 - `ProductID1`, `ProductID2`, … — SKU-specific utilities
 - `{Attribute}Level1`, `{Attribute}Level2`, … — utilities per attribute level
 
-The engine **does not** invent utilities; it reads them from HBU and combines them according to the scenario attribute values.
+The engine **does not** invent utilities; it reads them from HBU and combines them according to the scenario attribute values. See [DESIGN_FILES.md](DESIGN_FILES.md) and [STUDY_DATABASE.md](STUDY_DATABASE.md).
 
 ---
 
 ## What builds on the core
 
-| Higher-level | Uses | Role |
-|--------------|------|------|
-| `ShareEngine._run_pipeline` | preference → volume → metrics | Primary orchestration |
-| `ProjectCore.reload_results` / `find_predicted_shares` | ShareEngine | API / session entry |
-| `FastEvaluator` + `optimizer` | Same MNL + calculate_new_shares | Faster path for optimization |
-| `analytics/*` | Repeated find_predicted_shares runs | No separate choice model |
-
-Analytics modules (still wrappers around this pipeline):
-
-- `elasticity.py` — how share moves when a level changes
-- `fair_share.py` — actual vs proportional redistribution
-- `cross_brand.py` — ±10% price probes
-- `incremental.py` — intro / removal lineups
-- `price_index.py`, `som_sop.py`, `validation.py`
-
-**Important:** `FastEvaluator` must stay aligned with `preference_engine`. It reuses the same volume-share and metrics steps.
+Chart Analysis, incremental and scenario comparisons all call `findPredictedShares` repeatedly with different lineups or attribute values. None of them has its own choice model. See [charts/README.md](charts/README.md) and [SCENARIOS.md](SCENARIOS.md).
 
 ### Call chain
 
 ```
-API / analytics / optimizer
-  └─ ProjectCore.find_predicted_shares / reload_results
-       └─ ShareEngine._run_pipeline
-            ├─ compute_preference_shares (base + scenario)
-            ├─ calculate_new_shares (+ rebase)
-            └─ apply_scenario_metrics
-                 └─ revenue, value share, penetration
+UI / Chart Analysis / scenarios
+  └─ ProjectCore.getPredictedSharesDatatable
+       └─ ProjectCore.findPredictedShares
+            ├─ loadPreferenceShare("NewPreferenceShare")   (loadUtilityMatrix → getPreferenceShare)
+            ├─ Products.calculateNewShare                   (→ rebaseNewShare)
+            ├─ second pass of both, if a new product is included
+            └─ setProductsRevenue → setProductsValueSalesUnit → setProductsValueShare → setProductsPenetration
 ```
 
 ---
 
-## Code module map
+## Code map
 
-| Step | Python module | Original C# reference |
-|------|---------------|------------------------|
-| Utility + blending | `attribute_utilities.py` | `Attributes.cs` |
-| Preference / MNL choice | `preference_engine.py` | `loadUtilityMatrix`, `getPreferenceShare` |
-| WD, size, share, rebase | `share_calculator.py` | `Products.calculateNewShare`, `rebaseNewShare` |
-| Attribute edits | `attribute_engine.py` | `changeProductAttributeCombination` |
-| Pipeline orchestration | `share_engine.py` | `findPredictedShares` |
-| Revenue, value, penetration | `metrics.py` | `setProductsRevenue`, `setProductsValueShare`, `setProductsPenetration` |
-| UI / scenarios API | `project_core.py` | `ProjectCore.cs` |
-| Groups | `groups.py` | `Groups.cs` |
-| Financial (NOS/TDC) | `financial.py` | Stub — not fully ported |
-| Optimizer fast path | `fast_evaluator.py` | Same formulas as preference/share engines |
-
-### Function reference
-
-| File | Function | Role |
-|------|----------|------|
-| `attribute_utilities.py` | `_interpolate` / `attribute_level_utility` | Blend between calibrated levels |
-| `preference_engine.py` | `compute_preference_shares` | Scores → choice probabilities → preference % |
-| `share_calculator.py` | `calculate_new_shares` | Preference → volume (WD/size/funnel) |
-| `share_calculator.py` | `_rebase_new_share` | Conserve total volume |
-| `metrics.py` | `apply_base_metrics` / `apply_scenario_metrics` | Revenue, VSU, penetration |
+| Step | C# source |
+|------|-----------|
+| Utility + blending | `Attributes.getAttributeLevelUtility`, `interpolateUtiltiy` |
+| Preference / MNL choice | `ProjectCore.getProductUtility`, `loadUtilityMatrix`, `getPreferenceShare` |
+| WD, size, share, rebase | `Products.calculateNewShare`, `rebaseNewShare` |
+| Pipeline orchestration | `ProjectCore.findPredictedShares` |
+| Revenue, value, penetration | `ProjectCore.setProductsRevenue`, `setProductsValueSalesUnit`, `setProductsValueShare`, `setProductsPenetration` |
+| Results grid | `ProjectCore.fillProductDisplayResultRow` |
+| Groups | `Groups.cs` |
 
 ---
 
 ## Assumptions and limitations
 
-1. **Independence of irrelevant alternatives (IIA)** — Standard MNL property: relative odds between two products don’t change when a third is added. Inherited from the original simulator.
+1. **Independence of irrelevant alternatives (IIA)** — Standard MNL property: relative odds between two products don’t change when a third is added.
 
-2. **Linear blending** — Conditional attributes (Price/Size) assume utility moves in a straight line between calibrated points.
+2. **Linear blending, no extrapolation** — Conditional attributes (Price/Size) assume utility moves in a straight line between calibrated points. Values outside a product’s grid are an error.
 
-3. **Zero-sum market** — Total volume share is conserved (within the defined product set) after rebasing. The model does not forecast category growth.
+3. **Zero-sum market** — Total volume share is conserved after rebasing. The model does not forecast category growth.
 
-4. **Segmentation** — Filters respondents; it does not re-weight to population proportions unless the study design encodes that in respondent weights.
+4. **Segmentation** — Filters respondents; it does not re-weight to population proportions. Respondent weights scale utilities, not the preference average.
 
-5. **Financial metrics (NOS/TDC)** — Placeholder in Python; not yet calculated.
-
-6. **Validation** — Numeric parity with the legacy `.exe` is planned (see `PORTING_NOTES.md` Plan 2) but not yet automated.
+5. **Value share units** — Base revenue (with SU) is subtracted from a VSU total (without SU); see the units quirk above.
 
 ---
 
 ## Further reading
 
-- **Porting notes & C# cross-reference:** `decompiled/PORTING_NOTES.md`
-- **Architecture overview:** `README.md` (Architecture section)
-- **Chart Analysis:** `CHART_ANALYSIS.md`
-- **Brand Optimizer:** `OPTIMIZER_GUIDE.md`
-- **Smoke test:** `python -m scripts.smoke_study` — creates a demo study and checks shares sum to ~100%
-
----
-
-*Last updated: 2026-07-15 — merged former CORE_CALCULATIONS.md into this doc; reflects Python engine in `share_engine`, `preference_engine`, `share_calculator`, `attribute_utilities`, and `metrics`.*
+- **Detailed pages:** [README.md](README.md) lists every legacy page.
+- **Porting notes & C# cross-reference:** [PORTING_NOTES.md](Legacy%20App%20Decompiled/PORTING_NOTES.md)
+- **Decompiled source:** [MarketSimulator.Model](Legacy%20App%20Decompiled/MarketSimulator.Model/)
